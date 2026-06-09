@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PII Vault — Project Proposal</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #070709; }
+
+  /* ===== SLIDE ENGINE ===== */
+  .deck { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+  .slide {
+    display: none; flex: 1; overflow-y: auto;
+    padding: 36px 48px 72px;
+    flex-direction: column; justify-content: center;
+    color: #e2e8f0;
+    background: radial-gradient(ellipse at 60% 20%, rgba(99,102,241,0.04) 0%, transparent 55%), #070709;
+  }
+  .slide.active { display: flex; }
+
+  /* Content panel — subtle frosted frame around slide body */
+  .slide-panel {
+    background: rgba(255,255,255,0.028);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 18px;
+    padding: 36px 40px 32px;
+    backdrop-filter: blur(2px);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .slide-panel h2 { margin-bottom: 24px; }
+
+  /* ===== NAV BAR ===== */
+  .nav-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 52px; background: rgba(13,13,13,0.95); backdrop-filter: blur(10px);
+    border-top: 1px solid #1e1e1e;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; z-index: 100; user-select: none;
+  }
+  .nav-btn {
+    background: #1a1a1a; border: 1px solid #2a2a2a; color: #94a3b8;
+    padding: 6px 18px; border-radius: 6px; font-size: 0.82rem; cursor: pointer;
+    transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+  }
+  .nav-btn:hover:not(:disabled) { background: #242424; border-color: #3a3a3a; color: #e2e8f0; }
+  .nav-btn:disabled { opacity: 0.25; cursor: default; }
+  .nav-counter { font-size: 0.78rem; color: #475569; font-variant-numeric: tabular-nums; }
+  .nav-counter .cur { color: #818cf8; font-weight: 700; }
+
+  .progress-dots { display: flex; gap: 6px; align-items: center; }
+  .dot-nav {
+    width: 6px; height: 6px; border-radius: 50%; background: #2a2a2a;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .dot-nav.active { background: #818cf8; width: 18px; border-radius: 3px; }
+  .dot-nav:hover:not(.active) { background: #475569; }
+
+  /* ===== SHARED STYLES ===== */
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  .tag { display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
+  .tag-problem  { background: rgba(239,68,68,0.15);   color: #f87171; }
+  .tag-solution { background: rgba(99,102,241,0.15);  color: #818cf8; }
+  .tag-arch     { background: rgba(251,191,36,0.15);  color: #fbbf24; }
+  .tag-value    { background: rgba(34,197,94,0.15);   color: #4ade80; }
+  .tag-status   { background: rgba(148,163,184,0.12); color: #94a3b8; }
+  .tag-zero     { background: rgba(168,85,247,0.15);  color: #c084fc; }
+
+  h1 { font-size: 3rem; font-weight: 800; line-height: 1.1; color: #f8fafc; }
+  h2 { font-size: 2rem; font-weight: 700; line-height: 1.2; color: #f1f5f9; margin-bottom: 28px; }
+  h3 { font-size: 1.1rem; font-weight: 600; color: #cbd5e1; margin-bottom: 10px; }
+  .subtitle { font-size: 1.1rem; color: #64748b; margin-top: 10px; line-height: 1.6; }
+  .lead { font-size: 1.25rem; color: #94a3b8; line-height: 1.7; max-width: 820px; }
+
+  /* Cover */
+  .cover { background: radial-gradient(ellipse at 30% 50%, rgba(99,102,241,0.08) 0%, transparent 60%), #0d0d0d; }
+  .cover h1 { font-size: 3.8rem; }
+  .cover .accent { color: #818cf8; }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+  /* Cards */
+  .card { background: #161616; border-radius: 12px; padding: 22px; border: 1px solid #1f1f1f; }
+  .card.accent-red    { border-left: 3px solid #f87171; }
+  .card.accent-purple { border-left: 3px solid #818cf8; }
+  .card.accent-green  { border-left: 3px solid #4ade80; }
+  .card.accent-yellow { border-left: 3px solid #fbbf24; }
+  .card.accent-slate  { border-left: 3px solid #64748b; }
+  .card h3 { color: #e2e8f0; }
+  .card p  { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; margin-top: 6px; }
+
+  /* Problem boxes */
+  .problem-row { display: flex; gap: 12px; align-items: stretch; margin-bottom: 12px; }
+  .svc-box { background: #161616; border: 1px solid #222; border-radius: 8px; padding: 14px 18px; flex: 1; font-size: 0.82rem; }
+  .svc-name { font-weight: 700; color: #cbd5e1; margin-bottom: 4px; }
+  .svc-data { font-size: 0.75rem; color: #f87171; font-family: monospace; }
+  .arrow-down { text-align: center; font-size: 1.4rem; color: #374151; margin: 8px 0; }
+  .breach-box { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 14px 18px; font-size: 0.85rem; color: #f87171; text-align: center; }
+
+  /* Flow */
+  .flow-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .flow-box { padding: 10px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; text-align: center; }
+  .flow-arrow { color: #374151; font-size: 1.2rem; }
+  .f-caller  { background: rgba(99,102,241,0.12); color: #818cf8; border: 1px solid rgba(99,102,241,0.25); }
+  .f-gateway { background: rgba(34,197,94,0.12);  color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+  .f-vault   { background: rgba(251,191,36,0.12);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+  .f-kms     { background: rgba(239,68,68,0.12);   color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+  .f-db      { background: rgba(148,163,184,0.08); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+
+  /* Check list */
+  .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9rem; color: #94a3b8; line-height: 1.5; }
+  .checklist li .ic { flex-shrink: 0; font-size: 1rem; margin-top: 1px; }
+
+  /* ZT table */
+  .zt-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .zt-table th { text-align: left; padding: 10px 14px; color: #475569; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #1e1e1e; }
+  .zt-table td { padding: 11px 14px; border-bottom: 1px solid #161616; vertical-align: top; }
+  .zt-table tr:last-child td { border-bottom: none; }
+  .zt-table td:first-child { color: #c084fc; font-weight: 600; }
+  .zt-table td:nth-child(2) { color: #94a3b8; }
+  .zt-table td:last-child { color: #4ade80; font-size: 0.8rem; }
+
+  /* Status grid */
+  .status-col { display: flex; flex-direction: column; gap: 10px; }
+  .status-item { display: flex; gap: 8px; align-items: flex-start; font-size: 0.82rem; line-height: 1.4; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .dot-ok   { background: #4ade80; }
+  .dot-warn { background: #fbbf24; }
+  .dot-miss { background: #f87171; }
+  .status-item span { color: #94a3b8; }
+  .status-item strong { color: #e2e8f0; }
+
+  /* Roles */
+  .role-card { background: #161616; border-radius: 12px; padding: 22px; }
+  .role-name { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+  .priv-pill { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 0.7rem; font-family: monospace; margin: 2px; background: #1e1e1e; color: #94a3b8; }
+  .priv-pill.granted { background: rgba(34,197,94,0.1); color: #4ade80; }
+  .denied-example { margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; font-size: 0.75rem; color: #f87171; font-family: monospace; }
+
+  /* Divider */
+  .divider { width: 48px; height: 3px; background: #818cf8; border-radius: 2px; margin: 20px 0; }
+
+  /* Big stat */
+  .big-stats { display: flex; gap: 40px; margin-top: 32px; }
+  .stat-item { }
+  .stat-num { font-size: 2.8rem; font-weight: 800; color: #818cf8; line-height: 1; }
+  .stat-label { font-size: 0.8rem; color: #475569; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Roadmap */
+  .roadmap { display: flex; flex-direction: column; gap: 12px; }
+  .rm-row { display: flex; gap: 14px; align-items: flex-start; }
+  .rm-phase { width: 90px; flex-shrink: 0; padding: 6px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: 0.05em; }
+  .rm-p1 { background: rgba(34,197,94,0.12);   color: #4ade80; }
+  .rm-p2 { background: rgba(251,191,36,0.12);   color: #fbbf24; }
+  .rm-p3 { background: rgba(239,68,68,0.12);    color: #f87171; }
+  .rm-content { flex: 1; }
+  .rm-title { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+  .rm-items { font-size: 0.8rem; color: #64748b; line-height: 1.6; }
+
+  /* Tooltip */
+  .term { border-bottom: 1px dashed #475569; cursor: help; position: relative; white-space: nowrap; }
+  .term::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%); background: #1e293b; border: 1px solid #334155;
+    color: #e2e8f0; font-size: 0.72rem; font-weight: 400; line-height: 1.5;
+    padding: 8px 12px; border-radius: 6px; white-space: normal; width: max-content;
+    max-width: 280px; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 100;
+    text-align: left; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .term:hover::after { opacity: 1; }
+
+  /* Glossary */
+  .glossary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .g-item { background: #161616; border-radius: 8px; padding: 12px 14px; border: 1px solid #1f1f1f; }
+  .g-term { font-size: 0.82rem; font-weight: 700; color: #818cf8; margin-bottom: 4px; font-family: monospace; }
+  .g-full { font-size: 0.72rem; color: #475569; margin-bottom: 4px; }
+  .g-desc { font-size: 0.78rem; color: #94a3b8; line-height: 1.5; }
+
+  /* Keyboard hint */
+  .kbd-hint { position: fixed; top: 16px; right: 20px; font-size: 0.68rem; color: #2a2a2a; z-index: 50; }
+  .kbd-hint:hover { color: #475569; }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- SLIDE 1: Cover -->
+<div class="slide cover" data-slide="1">
+  <div style="max-width:760px">
+    <div class="tag tag-solution">Hasaki Internal Infrastructure</div>
+    <h1><span class="accent">Zero-Trust PII</span><br>Data Privacy Vault</h1>
+    <p style="margin-top:10px; font-size:1rem; color:#374151; font-weight:500; letter-spacing:0.04em">Hệ thống quản lý &amp; bảo vệ dữ liệu nhạy cảm · Hasaki Internal Infrastructure</p>
+    <p class="subtitle" style="margin-top:20px; font-size:1.15rem; max-width:580px">Single source of truth cho PII của Hasaki — mã hóa, kiểm soát truy cập, audit trail đầy đủ, và nền tảng để đạt chuẩn <span class="term" data-tip="GDPR: luật bảo vệ dữ liệu EU · PDPA: luật Việt Nam/Thái Lan — cả hai yêu cầu audit trail và right to erasure">GDPR / PDPA</span>.</p>
+    <div class="big-stats">
+      <div class="stat-item"><div class="stat-num">0</div><div class="stat-label">plaintext PII ra ngoài trust boundary</div></div>
+      <div class="stat-item"><div class="stat-num">100%</div><div class="stat-label">data-touching request có audit record</div></div>
+      <div class="stat-item"><div class="stat-num">Zero</div><div class="stat-label">Trust architecture</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 2: Vấn đề hiện tại -->
+<div class="slide" data-slide="2">
+  <div class="tag tag-problem">Vấn đề</div>
+  <h2>PII đang nằm rải rác — mỗi service tự encrypt theo cách riêng</h2>
+  <div class="grid-2" style="gap:32px">
+    <div>
+      <div class="problem-row">
+        <div class="svc-box"><div class="svc-name">Order Service</div><div class="svc-data">phone = AES(order_key, "0901...")</div></div>
+        <div class="svc-box"><div class="svc-name">CRM / Support</div><div class="svc-data">phone = AES(crm_key, "0901...")</div></div>
+      </div>
+      <div class="problem-row">
+        <div class="svc-box"><div class="svc-name">Warehouse / WMS</div><div class="svc-data">phone = AES(wms_key, "0901...")</div></div>
+        <div class="svc-box"><div class="svc-name">Auth Service</div><div class="svc-data">phone = AES(auth_key, "0901...")<br><span style="color:#fbbf24;font-size:0.7rem">nhân viên</span></div></div>
+      </div>
+      <div class="problem-row">
+        <div class="svc-box"><div class="svc-name">HR Service</div><div class="svc-data">CCCD = AES(hr_key, "0123...")<br>phone = AES(hr_key, "0901...")<br><span style="color:#fbbf24;font-size:0.7rem">nhân viên · hợp đồng · lương</span></div></div>
+        <div class="svc-box"><div class="svc-name">... n services khác</div><div class="svc-data">PII = AES(svc_key, ...)</div></div>
+      </div>
+      <div class="arrow-down">↓</div>
+      <div class="breach-box">Breach 1 service = lộ secret key + toàn bộ PII của service đó<br>n services = n điểm rủi ro độc lập</div>
+    </div>
+    <div>
+      <div class="card accent-red" style="margin-bottom:12px">
+        <h3>Không có unified audit trail</h3>
+        <p>"Ai đã đọc SĐT của khách X trong 6 tháng qua?" → không có câu trả lời</p>
+      </div>
+      <div class="card accent-red" style="margin-bottom:12px">
+        <h3>Right to erasure không khả thi</h3>
+        <p>Xóa data 1 khách hàng = phải tìm từng record trên từng service trên từng DB table</p>
+      </div>
+      <div class="card accent-red">
+        <h3>Không có access control theo mục đích</h3>
+        <p>Service A có key = đọc được tất cả. Không phân biệt đọc để giao hàng vs. đọc để phân tích marketing</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 3: Giải pháp -->
+<div class="slide" data-slide="3">
+  <div class="tag tag-solution">Giải pháp</div>
+  <h2>PII Vault — một nơi duy nhất lưu trữ và kiểm soát PII</h2>
+  <div class="grid-2" style="gap:32px; align-items:start">
+    <div>
+      <p class="lead" style="font-size:1rem; margin-bottom:24px">Các service không còn lưu PII — chỉ lưu <code style="background:#1e1e1e;padding:2px 7px;border-radius:4px;color:#818cf8">subject_id</code>. Muốn đọc/ghi PII phải đi qua PII Vault với đủ privilege + purpose.</p>
+      <div style="display:flex; gap:16px; margin-bottom:20px; align-items:center">
+        <div style="display:flex; flex-direction:column; gap:7px; flex-shrink:0">
+          <div class="flow-box f-caller" style="font-size:0.75rem; padding:7px 12px">Order Service<br><span style="font-size:0.68rem;font-weight:400;opacity:0.8">SĐT khách hàng</span></div>
+          <div class="flow-box f-caller" style="font-size:0.75rem; padding:7px 12px">HR Service<br><span style="font-size:0.68rem;font-weight:400;opacity:0.8">SĐT nhân viên</span></div>
+          <div class="flow-box f-caller" style="font-size:0.75rem; padding:7px 12px">Auth Service<br><span style="font-size:0.68rem;font-weight:400;opacity:0.8">SĐT nhân viên</span></div>
+          <div class="flow-box f-caller" style="font-size:0.75rem; padding:7px 12px; opacity:0.5">... n services<br><span style="font-size:0.68rem;font-weight:400">PII khác</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:7px; color:#374151; font-size:1.1rem; align-items:center">
+          <span>→</span><span>→</span><span>→</span><span>→</span>
+        </div>
+        <div class="flow-box f-vault" style="padding:16px 20px; font-size:0.9rem; flex-shrink:0">
+          PII Vault<br><span style="font-size:0.7rem;font-weight:400">authn → authz → audit</span>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box f-kms">Vault Transit<br><span style="font-size:0.7rem;font-weight:400">KMS</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box f-db">PostgreSQL<br><span style="font-size:0.7rem;font-weight:400">ciphertext only</span></div>
+      </div>
+      <div class="card accent-purple">
+        <h3>Invariant cốt lõi</h3>
+        <p>Không có plaintext PII nào rời khỏi trust boundary mà không có: authenticated caller + authorized privilege + audit record. Ba điều kiện — thiếu một là bị chặn.</p>
+      </div>
+    </div>
+    <div>
+      <ul class="checklist">
+        <li><span class="ic">✅</span><div><strong style="color:#e2e8f0">Single source of truth</strong><br>Cùng 1 subject_id được reference từ mọi service — không còn n bản sao rải rác</div></li>
+        <li><span class="ic">✅</span><div><strong style="color:#e2e8f0">Unified audit trail</strong><br>Mọi read/write đều có record: ai, service nào, field gì, purpose gì, allowed hay denied</div></li>
+        <li><span class="ic">✅</span><div><strong style="color:#e2e8f0">Right to erasure (GDPR)</strong><br>Xóa DEK của 1 subject → toàn bộ ciphertext trên hệ thống trở thành vô nghĩa — instant</div></li>
+        <li><span class="ic">✅</span><div><strong style="color:#e2e8f0">Purpose-of-use enforcement</strong><br>Đọc để giao hàng khác đọc để fraud detection — vault ghi nhận và kiểm soát từng loại</div></li>
+        <li><span class="ic">✅</span><div><strong style="color:#e2e8f0">Breach impact isolation</strong><br>Breach Order DB: chỉ có subject_id + wrapped DEK. Không có master key → không decrypt được</div></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 4: Crypto Architecture -->
+<div class="slide" data-slide="4">
+  <div class="tag tag-arch">Kiến trúc Crypto</div>
+  <h2>Envelope Encryption — mỗi record có DEK riêng</h2>
+  <div class="grid-3" style="align-items:start">
+    <div style="display:flex; flex-direction:column; gap:10px">
+      <div class="card accent-yellow">
+        <h3>1. Ghi dữ liệu</h3>
+        <p>Generate DEK ngẫu nhiên (AES-256) → Seal plaintext với DEK + AAD (record id) → Vault Transit wrap DEK → lưu <code style="color:#fbbf24">ciphertext + wrapped_dek</code></p>
+      </div>
+      <div class="card accent-yellow">
+        <h3>2. Đọc dữ liệu</h3>
+        <p>Vault Transit unwrap DEK → Decrypt ciphertext → DEK bị xóa khỏi memory → trả về plaintext cho caller đã được authn + authz</p>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px">
+      <div class="card accent-yellow">
+        <h3>3. Blind Index (Search)</h3>
+        <p>HMAC-SHA256 với HKDF-derived key riêng per field-type → lưu hash song song với ciphertext → tìm kiếm theo hash mà không expose plaintext</p>
+      </div>
+      <div class="card accent-yellow">
+        <h3>4. Right to Erasure</h3>
+        <p>Delete subject → Vault Transit xóa master key của subject → tất cả wrapped DEK không thể unwrap → ciphertext vô nghĩa vĩnh viễn</p>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px">
+      <div class="card accent-yellow">
+        <h3>5. Key Rotation định kỳ</h3>
+        <p>Vault Transit rotate master key → cấp version mới (v2, v3...) → wrapped DEK cũ vẫn unwrap được bằng version cũ → <strong style="color:#fbbf24">re-wrap dần dần sang version mới</strong> mà không cần decrypt/re-encrypt toàn bộ data</p>
+      </div>
+      <div style="background:#0f0f0f; border:1px solid #1f1f1f; border-left:3px solid #475569; border-radius:8px; padding:14px 16px; font-size:0.78rem; color:#64748b; line-height:1.7">
+        <div style="color:#94a3b8; font-weight:600; margin-bottom:6px">Tại sao rotate?</div>
+        <div>· Giới hạn <span style="color:#fbbf24">blast radius</span> nếu master key bị lộ — chỉ data encrypt bằng version đó bị ảnh hưởng</div>
+        <div>· Đáp ứng yêu cầu compliance (GDPR, PCI-DSS) về cryptographic agility</div>
+        <div>· Vault giữ min version để decrypt — version cũ hơn threshold bị revoke tự động</div>
+      </div>
+    </div>
+    <div style="background:#161616; border-radius:12px; padding:20px; border:1px solid #1f1f1f; font-size:0.8rem; color:#64748b; font-family:monospace; line-height:1.8">
+      <div style="color:#4ade80; margin-bottom:8px"># PostgreSQL pii_field row</div>
+      <div>subject_id: <span style="color:#818cf8">"sub_xxx"</span></div>
+      <div>field_type:  <span style="color:#818cf8">"phone"</span></div>
+      <div>ciphertext:  <span style="color:#f87171">AES256GCM(dek, "0901...")</span></div>
+      <div>wrapped_dek: <span style="color:#f87171">VaultTransit(dek)</span></div>
+      <div>blind_index: <span style="color:#fbbf24">HMAC("0901...")</span></div>
+      <div style="margin-top:12px; color:#4ade80"># Không có plaintext ở đâu cả</div>
+      <div style="color:#4ade80"># DEK chỉ tồn tại trong memory</div>
+      <div style="color:#4ade80"># khi đang decrypt</div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5: Zero Trust -->
+<div class="slide" data-slide="5">
+  <div class="tag tag-zero">Zero Trust Architecture</div>
+  <h2>Không tin tưởng bất kỳ caller nào — kể cả internal service</h2>
+  <div class="grid-2" style="gap:32px">
+    <table class="zt-table">
+      <thead>
+        <tr><th>Nguyên tắc Zero Trust</th><th>Vấn đề truyền thống</th><th>PII Vault làm gì</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Never trust, always verify</td><td>Internal network → tự động tin tưởng</td><td>Mọi request đều phải authn + authz, deny-by-default</td></tr>
+        <tr><td>Least privilege</td><td>Có key = đọc được tất cả</td><td>Per-role privilege set, từng operation riêng</td></tr>
+        <tr><td>Assume breach</td><td>1 key compromised = toàn bộ data lộ</td><td>Per-record DEK — breach 1 record không ảnh hưởng record khác</td></tr>
+        <tr><td>Verify explicitly</td><td>Role được gán 1 lần, không revalidate</td><td>Identity resolved mỗi request, privilege check mỗi method</td></tr>
+        <tr><td>Audit everything</td><td>Chỉ log khi có lỗi</td><td>Mọi request — kể cả denied — đều có audit record</td></tr>
+        <tr><td>Encrypt everywhere</td><td>Encrypt at rest, plaintext in transit internally</td><td>AES-256-GCM at rest + gRPC TLS in transit + KMS-wrapped keys</td></tr>
+      </tbody>
+    </table>
+    <div>
+      <div style="background:#161616; border-radius:12px; padding:20px; border:1px solid #1f1f1f;">
+        <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:#475569; margin-bottom:12px">Interceptor chain (thứ tự quan trọng)</div>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:0.8rem;">
+          <div style="display:flex; gap:10px; align-items:center"><span style="background:#1e1e1e;padding:2px 8px;border-radius:4px;color:#818cf8;font-family:monospace;font-size:0.72rem">1</span><span style="color:#94a3b8">SanitizeMetadata — allowlist headers</span></div>
+          <div style="display:flex; gap:10px; align-items:center"><span style="background:#1e1e1e;padding:2px 8px;border-radius:4px;color:#818cf8;font-family:monospace;font-size:0.72rem">2</span><span style="color:#94a3b8">Authentication — JWT JWKS hoặc mTLS cert</span></div>
+          <div style="display:flex; gap:10px; align-items:center"><span style="background:#1e1e1e;padding:2px 8px;border-radius:4px;color:#c084fc;font-family:monospace;font-size:0.72rem">3</span><span style="color:#e2e8f0;font-weight:600">Privilege Check — <span style="color:#f87171">DENY by default</span> nếu không có entry</span></div>
+          <div style="display:flex; gap:10px; align-items:center"><span style="background:#1e1e1e;padding:2px 8px;border-radius:4px;color:#818cf8;font-family:monospace;font-size:0.72rem">4</span><span style="color:#94a3b8">Recovery — catch panics</span></div>
+          <div style="display:flex; gap:10px; align-items:center"><span style="background:#1e1e1e;padding:2px 8px;border-radius:4px;color:#818cf8;font-family:monospace;font-size:0.72rem">5</span><span style="color:#94a3b8">Error mapping — uniform responses</span></div>
+          <div style="display:flex; gap:10px; align-items:center"><span style="background:#1e1e1e;padding:2px 8px;border-radius:4px;color:#4ade80;font-family:monospace;font-size:0.72rem">6</span><span style="color:#4ade80">Audit — ghi record sau mỗi call, kể cả denied</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 6: Role-based Access Demo -->
+<div class="slide" data-slide="6">
+  <div class="tag tag-value">Access Control</div>
+  <h2>Mỗi service / role chỉ được làm đúng việc của mình</h2>
+  <div class="grid-3">
+    <div class="role-card" style="border-left:3px solid #818cf8">
+      <div class="role-name" style="color:#818cf8">🚚 Shipper</div>
+      <div style="font-size:0.75rem; color:#475569; margin-bottom:8px">Qua Order Service (mTLS)</div>
+      <div>
+        <div class="priv-pill granted">pii-subject-read</div>
+        <div class="priv-pill granted">pii-field-read</div>
+        <div class="priv-pill">pii-field-write</div>
+        <div class="priv-pill">pii-subject-create</div>
+        <div class="priv-pill">pii-field-search</div>
+      </div>
+      <div class="denied-example">POST /subjects<br>→ 403 PERMISSION_DENIED<br><br>GET /fields/search<br>→ 403 PERMISSION_DENIED</div>
+      <div style="margin-top:10px; font-size:0.75rem; color:#64748b">Điều kiện đọc SĐT: Order Service verify order.status == "delivering" &amp;&amp; shipper assigned trước khi gọi vault</div>
+    </div>
+    <div class="role-card" style="border-left:3px solid #4ade80">
+      <div class="role-name" style="color:#4ade80">💬 Customer Service (CS)</div>
+      <div style="font-size:0.75rem; color:#475569; margin-bottom:8px">Direct gateway / internal tool</div>
+      <div>
+        <div class="priv-pill granted">pii-subject-read</div>
+        <div class="priv-pill granted">pii-field-read</div>
+        <div class="priv-pill granted">pii-field-write</div>
+        <div class="priv-pill">pii-subject-create</div>
+        <div class="priv-pill">pii-field-search</div>
+      </div>
+      <div class="denied-example">POST /subjects<br>→ 403 PERMISSION_DENIED<br><br>GET /fields/search<br>→ 403 PERMISSION_DENIED</div>
+      <div style="margin-top:10px; font-size:0.75rem; color:#64748b">Đọc + cập nhật PII khi handle ticket — không tạo subject mới, không search bulk</div>
+    </div>
+    <div class="role-card" style="border-left:3px solid #fbbf24">
+      <div class="role-name" style="color:#fbbf24">⚙️ Ops / Admin</div>
+      <div style="font-size:0.75rem; color:#475569; margin-bottom:8px">Internal admin tool</div>
+      <div>
+        <div class="priv-pill granted">pii-subject-create</div>
+        <div class="priv-pill granted">pii-subject-read</div>
+        <div class="priv-pill granted">pii-field-read</div>
+        <div class="priv-pill granted">pii-field-write</div>
+        <div class="priv-pill granted">pii-field-search</div>
+      </div>
+      <div style="margin-top:12px; padding:10px 12px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.2); border-radius:6px; font-size:0.75rem; color:#4ade80; font-family:monospace">Full access với purpose audit trail<br>Mọi read đều phải khai purpose</div>
+      <div style="margin-top:10px; font-size:0.75rem; color:#64748b">Import data, xử lý GDPR request, điều tra incident — toàn bộ đều có audit record</div>
+    </div>
+  </div>
+  <div style="margin-top:20px; padding:14px 20px; background:#161616; border-radius:8px; border:1px solid #1f1f1f; font-size:0.82rem; color:#64748b">
+    <strong style="color:#94a3b8">Trong production:</strong> privilege đến từ JWT claims của auth-api (RBAC). Dev mode: hardcode per-key privilege map — không bao giờ vào production config.
+  </div>
+</div>
+
+<!-- SLIDE 7: Current Status -->
+<div class="slide" data-slide="7">
+  <div class="tag tag-status">Trạng thái hiện tại</div>
+  <h2>Core vault đang chạy thật — cần thêm infra để production-ready</h2>
+  <div class="grid-3">
+    <div>
+      <h3 style="color:#4ade80; margin-bottom:14px">✓ Đã có, đang chạy thật</h3>
+      <div class="status-col">
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>Envelope encryption</strong><span> AES-256-GCM per-record DEK</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>Blind index search</strong><span> HMAC-SHA256, tìm theo encrypted value</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>Audit log</strong><span> 114+ records, attempt→result pairs</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>PostgreSQL</strong><span> subject, pii_field, audit_record tables</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>gRPC backend</strong><span> 5 methods, interceptor chain</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>REST Gateway</strong><span> 5 endpoints, API key auth, CORS</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>Deny-by-default authz</strong><span> method không có entry = blocked</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>Purpose-of-use</strong><span> required non-empty cho sensitive reads</span></div></div>
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>Playground UI (live)</strong><span> browser → gateway → vault thật</span></div></div>
+      </div>
+    </div>
+    <div>
+      <h3 style="color:#fbbf24; margin-bottom:14px">⚠ Có nhưng còn fake / dev-only</h3>
+      <div class="status-col">
+        <div class="status-item"><div class="dot dot-ok"></div><div><strong>KMS (Vault Transit)</strong><span> real wrap/unwrap qua HashiCorp Vault API</span></div></div>
+        <div class="status-item"><div class="dot dot-warn"></div><div><strong>Authentication</strong><span> DevVerifier — accept any Bearer token</span></div></div>
+        <div class="status-item"><div class="dot dot-warn"></div><div><strong>Authorization</strong><span> 1 privilege set cho tất cả caller</span></div></div>
+        <div class="status-item"><div class="dot dot-warn"></div><div><strong>Frontend views</strong><span> subjects, audit, keys — mostly mock data</span></div></div>
+      </div>
+    </div>
+    <div>
+      <h3 style="color:#f87171; margin-bottom:14px">✗ Cần để production-ready</h3>
+      <div class="status-col">
+        <div class="status-item"><div class="dot dot-miss"></div><div><strong>JWT verify (JWKS)</strong><span> verify RS256 từ auth-api</span></div></div>
+        <div class="status-item"><div class="dot dot-miss"></div><div><strong>mTLS service-to-service</strong><span> Order Svc, WMS → vault</span></div></div>
+        <div class="status-item"><div class="dot dot-miss"></div><div><strong>Per-role privilege sets</strong><span> authz theo identity thật</span></div></div>
+        <div class="status-item"><div class="dot dot-miss"></div><div><strong>Right to erasure endpoint</strong><span> GDPR delete flow</span></div></div>
+        <div class="status-item"><div class="dot dot-miss"></div><div><strong>Rate limiting</strong><span> Redis, per-key throttle</span></div></div>
+        <div class="status-item"><div class="dot dot-miss"></div><div><strong>Frontend wired to real API</strong><span> audit, subjects, keys views</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 8: Roadmap -->
+<div class="slide" data-slide="8">
+  <div class="tag tag-solution">Roadmap</div>
+  <h2>3 giai đoạn để đưa vào production</h2>
+  <div class="grid-2" style="gap:40px; align-items:start">
+    <div class="roadmap">
+      <div class="rm-row">
+        <div class="rm-phase rm-p1">Phase 1<br>Demo-ready</div>
+        <div class="rm-content">
+          <div class="rm-title">Role simulation + Playground hoàn chỉnh</div>
+          <div class="rm-items">Multi-key gateway (shipper / CS / ops) · Per-identity privilege sets · Role selector UI · Audit trail panel · DB schema panel · Demo story end-to-end với 403 cases</div>
+        </div>
+      </div>
+      <div class="rm-row">
+        <div class="rm-phase rm-p2">Phase 2<br>Integration</div>
+        <div class="rm-content">
+          <div class="rm-title">Wire với auth-api + real KMS</div>
+          <div class="rm-items">HashiCorp Vault Transit (dev server) · JWT verify từ auth-api JWKS · mTLS certificates (local CA) · Frontend views wired to real API · Rate limiting Redis</div>
+        </div>
+      </div>
+      <div class="rm-row">
+        <div class="rm-phase rm-p3">Phase 3<br>Production</div>
+        <div class="rm-content">
+          <div class="rm-title">Production hardening</div>
+          <div class="rm-items">Right to erasure endpoint · Key rotation workflow · Data retention policy · First consumer service migration (Order Service) · Compliance report export</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card accent-purple" style="margin-bottom:16px">
+        <h3>Tại sao làm ngay bây giờ?</h3>
+        <p>PDPA (Personal Data Protection Act) có hiệu lực — các công ty xử lý PII cần audit trail và right-to-erasure. Xây dựng infrastructure trước khi regulatory pressure = chủ động, không bị động.</p>
+      </div>
+      <div class="card accent-green" style="margin-bottom:16px">
+        <h3>ROI kỹ thuật <span style="font-size:0.72rem;font-weight:400;color:#475569">(Return on Investment)</span></h3>
+        <p>Mỗi service mới không cần tự implement encryption, key management, audit — gắn vào PII Vault. Giảm surface area bảo mật từ n services xuống 1.</p>
+      </div>
+      <div class="card accent-yellow">
+        <h3>Phase 1 deliverable</h3>
+        <p>Live demo: 3 role thử gọi API, thấy 403 real-time, xem audit record được ghi, xem ciphertext trong DB — đủ để present cho stakeholders.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 9: Glossary -->
+<div class="slide" data-slide="9">
+  <div class="tag tag-status">Bảng thuật ngữ</div>
+  <h2>Giải thích các từ ngữ chuyên ngành</h2>
+  <div class="glossary-grid">
+    <div class="g-item"><div class="g-term">PII</div><div class="g-full">Personally Identifiable Information</div><div class="g-desc">Thông tin có thể dùng để nhận dạng một cá nhân — họ tên, số điện thoại, email, CCCD, địa chỉ.</div></div>
+    <div class="g-item"><div class="g-term">GDPR</div><div class="g-full">General Data Protection Regulation</div><div class="g-desc">Luật bảo vệ dữ liệu cá nhân của Liên minh châu Âu (2018). Quy định quyền truy cập, xóa, và kiểm soát dữ liệu của người dùng.</div></div>
+    <div class="g-item"><div class="g-term">PDPA</div><div class="g-full">Personal Data Protection Act</div><div class="g-desc">Luật bảo vệ dữ liệu cá nhân — phiên bản Thái Lan (hiệu lực 2022) và Việt Nam (Nghị định 13/2023/NĐ-CP). Yêu cầu audit trail và right to erasure.</div></div>
+    <div class="g-item"><div class="g-term">DEK</div><div class="g-full">Data Encryption Key</div><div class="g-desc">Khóa mã hóa tạo ngẫu nhiên cho từng record. Plaintext DEK chỉ tồn tại trong memory khi đang encrypt/decrypt — không bao giờ lưu xuống disk.</div></div>
+    <div class="g-item"><div class="g-term">Envelope Encryption</div><div class="g-full">Mã hóa phong bì</div><div class="g-desc">Mã hóa 2 lớp: DEK mã hóa data, master key (KMS) mã hóa DEK. Kết quả lưu: ciphertext + wrapped_dek. Compromise 1 DEK không ảnh hưởng toàn bộ data.</div></div>
+    <div class="g-item"><div class="g-term">KMS</div><div class="g-full">Key Management Service</div><div class="g-desc">Dịch vụ quản lý master key. Ở đây dùng HashiCorp Vault Transit — wrap/unwrap DEK mà không để DEK rời khỏi Vault. Thay thế cho secret key hardcode.</div></div>
+    <div class="g-item"><div class="g-term">Vault Transit</div><div class="g-full">HashiCorp Vault — Transit Secrets Engine</div><div class="g-desc">Tính năng "encryption as a service" của Vault: gửi DEK vào, nhận về wrapped_dek (dạng vault:v1:...). Master key không bao giờ rời khỏi Vault.</div></div>
+    <div class="g-item"><div class="g-term">Blind Index</div><div class="g-full">Hash Index trên encrypted field</div><div class="g-desc">HMAC-SHA256 của plaintext, lưu song song với ciphertext. Tìm kiếm bằng cách hash query rồi so sánh hash — không cần decrypt toàn bộ data.</div></div>
+    <div class="g-item"><div class="g-term">AES-256-GCM</div><div class="g-full">Advanced Encryption Standard, 256-bit, Galois/Counter Mode</div><div class="g-desc">Thuật toán mã hóa đối xứng chuẩn công nghiệp. GCM cung cấp cả mã hóa lẫn xác thực toàn vẹn — phát hiện nếu ciphertext bị giả mạo.</div></div>
+    <div class="g-item"><div class="g-term">mTLS</div><div class="g-full">Mutual TLS — xác thực hai chiều</div><div class="g-desc">TLS thông thường: client verify server cert. mTLS: cả hai phía đều xuất trình certificate. Service-to-service auth — Order Service cần cert hợp lệ để gọi PII Vault.</div></div>
+    <div class="g-item"><div class="g-term">Zero Trust</div><div class="g-full">Mô hình bảo mật "không tin tưởng mặc định"</div><div class="g-desc">Không có "trusted network" — kể cả traffic nội bộ đều phải xác thực và authorize. Mọi request bị coi là untrusted cho đến khi prove otherwise.</div></div>
+    <div class="g-item"><div class="g-term">gRPC</div><div class="g-full">Google Remote Procedure Call</div><div class="g-desc">Framework gọi hàm từ xa của Google, dùng Protocol Buffers (nhị phân, hiệu quả hơn JSON). Service-to-service communication trong hệ thống Hasaki.</div></div>
+    <div class="g-item"><div class="g-term">JWT / JWKS</div><div class="g-full">JSON Web Token / JSON Web Key Set</div><div class="g-desc">JWT: token xác thực dạng JSON được ký số (RS256). JWKS: endpoint public keys để verify chữ ký JWT. PII Vault sẽ verify JWT từ JWKS của auth-api.</div></div>
+    <div class="g-item"><div class="g-term">Right to Erasure</div><div class="g-full">Quyền được xóa dữ liệu (GDPR Article 17)</div><div class="g-desc">Người dùng có quyền yêu cầu xóa toàn bộ dữ liệu cá nhân. Với PII Vault: xóa DEK của subject → tất cả ciphertext trên hệ thống trở thành vô nghĩa ngay lập tức.</div></div>
+    <div class="g-item"><div class="g-term">Deny-by-default</div><div class="g-full">Từ chối mặc định</div><div class="g-desc">Nếu một API endpoint không được đăng ký trong privilege registry → tự động bị chặn. Ngược với allow-by-default: quên bảo vệ = bị lộ.</div></div>
+    <div class="g-item"><div class="g-term">Audit Trail</div><div class="g-full">Nhật ký kiểm toán</div><div class="g-desc">Bản ghi bất biến mọi hành động: ai đọc/ghi field nào, lúc nào, mục đích gì, kết quả allowed hay denied. Bằng chứng cho compliance và điều tra incident.</div></div>
+    <div class="g-item"><div class="g-term">Purpose-of-Use</div><div class="g-full">Mục đích sử dụng dữ liệu</div><div class="g-desc">Caller phải khai rõ lý do đọc PII (vd: "delivery", "fraud-check", "support"). Được ghi vào audit record — truy vết được "tại sao dữ liệu này bị đọc".</div></div>
+    <div class="g-item"><div class="g-term">AAD</div><div class="g-full">Additional Authenticated Data</div><div class="g-desc">Dữ liệu được xác thực cùng ciphertext (thường là record ID). Ciphertext bị "dính" với record — không thể copy sang record khác mà không bị phát hiện.</div></div>
+  </div>
+  <p style="margin-top:16px; font-size:0.75rem; color:#374151; text-align:right">Hover lên các từ gạch chân trong slide để xem giải thích nhanh</p>
+</div>
+
+</div><!-- /.deck -->
+
+<!-- Navigation bar -->
+<div class="nav-bar">
+  <button class="nav-btn" id="btn-prev" onclick="navigate(-1)">← Prev</button>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:8px">
+    <div class="progress-dots" id="dots"></div>
+    <div class="nav-counter"><span class="cur" id="cur-num">1</span> / <span id="total-num">9</span></div>
+  </div>
+  <button class="nav-btn" id="btn-next" onclick="navigate(1)">Next →</button>
+</div>
+
+<div class="kbd-hint">← → navigate · Space next</div>
+
+<script>
+(function() {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let current = 0;
+
+  const dotsEl = document.getElementById('dots');
+  const curNumEl = document.getElementById('cur-num');
+  const totalNumEl = document.getElementById('total-num');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+
+  totalNumEl.textContent = total;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot-nav';
+    d.onclick = () => goTo(i);
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(idx) {
+    slides[current].classList.remove('active');
+    current = Math.max(0, Math.min(total - 1, idx));
+    slides[current].classList.add('active');
+    slides[current].scrollTop = 0;
+
+    curNumEl.textContent = current + 1;
+    btnPrev.disabled = current === 0;
+    btnNext.disabled = current === total - 1;
+
+    dotsEl.querySelectorAll('.dot-nav').forEach((d, i) => {
+      d.classList.toggle('active', i === current);
+    });
+  }
+
+  window.navigate = (dir) => goTo(current + dir);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); navigate(1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp') { e.preventDefault(); navigate(-1); }
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End')  goTo(total - 1);
+  });
+
+  // Touch/swipe
+  let touchX = 0;
+  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 50) navigate(dx < 0 ? 1 : -1);
+  }, { passive: true });
+
+  // Wrap each slide's non-tag children in a panel div for the frosted frame
+  document.querySelectorAll('.slide').forEach(slide => {
+    const children = Array.from(slide.children).filter(el => !el.classList.contains('tag'));
+    if (children.length === 0) return;
+    const panel = document.createElement('div');
+    panel.className = 'slide-panel';
+    children[0].before(panel);
+    children.forEach(el => panel.appendChild(el));
+  });
+
+  goTo(0);
+})();
+</script>
+
+</body>
+</html>
